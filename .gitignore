@@ -1,0 +1,26 @@
+# Local Environment Credentials
+.env
+
+# Python Virtual Environment
+venv/
+.venv/
+env/
+
+# Python Cache & Compiled Files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Application Caches & Temporary Files
+schema_cache.json
+temp_uploads/
+report.md
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

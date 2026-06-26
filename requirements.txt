@@ -1,0 +1,8 @@
+neo4j>=5.20.0
+google-genai>=2.10.0
+faker>=25.0.0
+python-dotenv>=1.0.1
+pandas>=2.2.0
+pydantic>=2.6.0
+streamlit>=1.35.0
+watchdog>=4.0.0
