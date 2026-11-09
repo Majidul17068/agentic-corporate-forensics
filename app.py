@@ -1,9 +1,19 @@
+import logging
 import os
 import shutil
 import time
 import streamlit as st
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
+
+from personakit import enable_verbose_logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+enable_verbose_logging()
 
 from agents.ingester import DatasetIngesterAgent
 from agents.orchestrator import CollaborativeOrchestrator
