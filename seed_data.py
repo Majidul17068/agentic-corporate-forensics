@@ -10,6 +10,7 @@ load_dotenv()
 URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
 PASSWORD = os.getenv("NEO4J_PASSWORD", "password123")
+DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
 
 fake = Faker()
 
@@ -252,6 +253,41 @@ def inject_fraud_patterns(session):
         CREATE (b1)-[:TRANSFERRED_MONEY {amount: 1500000.00, currency: 'GBP', timestamp: '2025-05-15T10:00:00', transaction_id: 'TX-CONFL-101'}]->(b2)
     """)
 
+    print(" -> Injecting Pattern 4: Structuring / smurfing into Helena Vasquez's shell company")
+
+    session.run("CREATE (p:Person {name: 'Helena Vasquez', tax_id: '222-333-4444', nationality: 'Spain', role: 'Entrepreneur', is_pep: false})")
+    session.run("CREATE (c_smurf:Company {name: 'Costa Import Export SL', registration_number: 'ES-556677', jurisdiction: 'Panama', incorporation_date: '2025-09-02'})")
+    session.run("MATCH (p:Person {name: 'Helena Vasquez'}), (c:Company {name: 'Costa Import Export SL'}) CREATE (p)-[:OWNER_OF {ownership_percentage: 100}]->(c)")
+    session.run("CREATE (b_smurf:BankAccount {account_number: 'ES-SMURF-0001', bank_name: 'Banco Costa', country: 'Spain'})")
+    session.run("MATCH (c:Company {name: 'Costa Import Export SL'}), (b:BankAccount {account_number: 'ES-SMURF-0001'}) CREATE (c)-[:HAS_BANK_ACCOUNT]->(b)")
+
+    # 12 sub-threshold deposits (each just under the 10,000 reporting limit) from disposable feeder accounts
+    for i in range(1, 13):
+        acc = f"FEEDER-{i:03d}"
+        session.run(
+            "CREATE (b:BankAccount {account_number: $acc, bank_name: 'Banco Costa', country: 'Spain'})",
+            acc=acc,
+        )
+        session.run(
+            """
+            MATCH (b1:BankAccount {account_number: $acc}), (b2:BankAccount {account_number: 'ES-SMURF-0001'})
+            CREATE (b1)-[:TRANSFERRED_MONEY {
+                amount: $amount, currency: 'EUR', timestamp: $ts, transaction_id: $tx
+            }]->(b2)
+            """,
+            acc=acc,
+            amount=round(random.uniform(9100, 9900), 2),
+            ts=f"2025-11-{i+5:02d}T{9 + (i % 8):02d}:30:00",
+            tx=f"TX-SMURF-{i:03d}",
+        )
+
+    # then one consolidated outbound sweep to the Panama secrecy account
+    session.run("""
+        MATCH (b1:BankAccount {account_number: 'ES-SMURF-0001'}), (b2:BankAccount {account_number: 'PAN-BANK-8899'})
+        CREATE (b1)-[:TRANSFERRED_MONEY {amount: 112000.00, currency: 'EUR', timestamp: '2025-11-25T16:45:00', transaction_id: 'TX-SMURF-OUT'}]->(b2)
+    """)
+
+
 def main():
     print("Connecting to Neo4j database to seed mock corporate data...")
     try:
@@ -260,7 +296,7 @@ def main():
         return
         
     with driver:
-        with driver.session() as session:
+        with driver.session(database=DATABASE) as session:
             clear_database(session)
             create_constraints(session)
             seed_standard_data(session)
