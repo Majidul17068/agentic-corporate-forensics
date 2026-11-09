@@ -73,6 +73,69 @@ class IngestionSpec(BaseModel):
     relationships: List[RelationshipMapping] = Field(description="Relationships to extract from the CSV")
 
 
+class _PropertyPair(BaseModel):
+    csv_column: str = Field(description="CSV column name")
+    neo4j_property: str = Field(description="Neo4j property name to store the value under")
+
+
+class _LlmNodeMapping(BaseModel):
+    label: str = Field(description="Neo4j label for the node, e.g. Person, Company, BankAccount")
+    id_column: str = Field(description="The CSV column representing the unique identifier for this node")
+    id_property: str = Field(description="The Neo4j property name for this identifier, e.g. name, account_number")
+    property_mappings: List[_PropertyPair] = Field(
+        description="List of additional CSV column to Neo4j property mappings for this node."
+    )
+
+
+class _LlmRelationshipMapping(BaseModel):
+    type: str = Field(description="The relationship type, e.g. TRANSFERRED_MONEY_TO, OWNER_OF, REGISTERED_AT")
+    source_label: str = Field(description="The label of the source node")
+    source_id_column: str = Field(description="The CSV column of the source node's unique identifier")
+    source_id_property: str = Field(description="The Neo4j property name for the source node's identifier")
+    target_label: str = Field(description="The label of the target node")
+    target_id_column: str = Field(description="The CSV column of the target node's unique identifier")
+    target_id_property: str = Field(description="The Neo4j property name for the target node's identifier")
+    property_mappings: List[_PropertyPair] = Field(
+        description="List of additional CSV column to relationship property mappings."
+    )
+
+
+class _LlmIngestionSpec(BaseModel):
+    nodes: List[_LlmNodeMapping] = Field(description="Nodes to extract from the CSV")
+    relationships: List[_LlmRelationshipMapping] = Field(description="Relationships to extract from the CSV")
+
+
+def _pairs_to_dict(pairs: List[_PropertyPair]) -> Dict[str, str]:
+    return {p.csv_column: p.neo4j_property for p in pairs}
+
+
+def _llm_spec_to_ingestion_spec(llm_spec: _LlmIngestionSpec) -> IngestionSpec:
+    return IngestionSpec(
+        nodes=[
+            NodeMapping(
+                label=n.label,
+                id_column=n.id_column,
+                id_property=n.id_property,
+                properties=_pairs_to_dict(n.property_mappings),
+            )
+            for n in llm_spec.nodes
+        ],
+        relationships=[
+            RelationshipMapping(
+                type=r.type,
+                source_label=r.source_label,
+                source_id_column=r.source_id_column,
+                source_id_property=r.source_id_property,
+                target_label=r.target_label,
+                target_id_column=r.target_id_column,
+                target_id_property=r.target_id_property,
+                properties=_pairs_to_dict(r.property_mappings),
+            )
+            for r in llm_spec.relationships
+        ],
+    )
+
+
 class DatasetIngesterAgent:
     def __init__(self):
         self.client = genai.Client()
@@ -106,12 +169,13 @@ Generate a structured JSON schema mapping details.
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=IngestionSpec,
+                response_schema=_LlmIngestionSpec,
                 temperature=0.1
             )
         )
 
-        return IngestionSpec.model_validate_json(response.text.strip())
+        llm_spec = _LlmIngestionSpec.model_validate_json(response.text.strip())
+        return _llm_spec_to_ingestion_spec(llm_spec)
 
     def validate_spec(self, spec: IngestionSpec) -> None:
         for nm in spec.nodes:
