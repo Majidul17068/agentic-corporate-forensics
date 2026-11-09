@@ -1,5 +1,10 @@
 # Local Environment Credentials
+# `.env` alone matches only that exact name. Variants such as .env.local,
+# .env.aura.bak and .env.production are the same secrets under another
+# filename, and this repository is public, so they are matched explicitly.
 .env
+.env.*
+!.env.example
 
 # Python Virtual Environment
 venv/
